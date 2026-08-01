@@ -7,13 +7,19 @@ class Common(BaseModel):
 class prepareAndFinal(Common):
     execute: str
 
+class TestCase(Common):
+    name: str
+    request_header: dict
+    request_body: dict | str
+    status_code: int
+
 class ElementInfo(Common):
     method: str
     path: str
     operation_id: str|None
     summary: str|None
     description: str|None
-    cases: list
+    cases: list[TestCase]
 
 class SwagTaceTestFormat(Common):
     openapi: str
@@ -21,3 +27,4 @@ class SwagTaceTestFormat(Common):
     prepare: prepareAndFinal
     tags: dict[str, list[ElementInfo]]
     final: prepareAndFinal
+
