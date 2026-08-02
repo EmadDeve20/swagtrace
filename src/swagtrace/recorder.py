@@ -1,23 +1,22 @@
 import json
 import urllib.error
 import urllib.request
+from urllib.parse import parse_qsl
+import yaml
+
 from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 from pathlib import Path
-import yaml
-
 
 from yaml_syntax.syntax import YamlSyntax
 
-from swagtrace.consts import DEFAULT_YAML_FILE
 from swagtrace.yaml_schema import SwagTaceTestFormat, TestCase
+from swagtrace.utils import  match_path_template
+from swagtrace.consts import TEST_CASE_FORMAT_FILE
 
-TARGET_HOST = "http://127.0.0.1:8000"
-LISTEN_PORT = 8080
 
-LOCAL_IDENTIFIERS = ['localhost', '127.0.0.1', '0.0.0.0']
-
+# TODO: Use Noise Headers in a config file 
 BROWSER_NOISE_HEADERS = {
     "host", "connection", "keep-alive", "proxy-connection", "proxy-authorization",
     "te", "trailer", "transfer-encoding", "upgrade", "user-agent", "accept-language",
@@ -29,15 +28,23 @@ BROWSER_NOISE_HEADERS = {
     "dnt", "sec-gpc", "cache-control", "pragma", "if-none-match", "if-modified-since",
 }
 
+test_file_path:list[Path] = []
+test_file_context:list[str] = []
+
 class APIRecorderProxyHandler(BaseHTTPRequestHandler):
 
-    def __init__(self, yaml_syntax:YamlSyntax, *args, **kwargs):
+    def __init__(self, yaml_syntax:YamlSyntax, host:str, test_module_path:str, *args, **kwargs):
         self.yaml_syntax = yaml_syntax
+        self.host = host
+        self.test_module_path = Path(test_module_path)
 
         self.yaml_schema = yaml_syntax.serialized_data
 
         self.PATH_TO_CASES_MAPPER: dict[str, list[TestCase]] = {
             el.path:el.cases  for _, elements in self.yaml_schema.tags.items() for el in elements
+        }
+        self.PATH_TO_TAG_MAPPER: dict[str, str] = {
+            el.path:tag  for tag, elements in self.yaml_schema.tags.items() for el in elements
         }
 
         super().__init__(*args, **kwargs)
@@ -45,14 +52,14 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
     def handle_proxy(self):
         method = self.command
         headers = self.headers
-
-
         parsed_url = urlparse(self.path)
-        clean_path = parsed_url.path
-        if parsed_url.query:
-            clean_path += f"?{parsed_url.query}"
-        if not clean_path.startswith("/"):
-            clean_path = "/" + clean_path
+
+        actual_path = parsed_url.path
+        if not actual_path.startswith("/"):
+            actual_path = "/" + actual_path
+
+        # TODO: Also Save query params in Case Template
+        query_params = parse_qsl(parsed_url.query)
 
         content_length = int(headers.get('Content-Length', 0))
         body_bytes = self.rfile.read(content_length) if content_length > 0 else b""
@@ -63,10 +70,27 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
             if k.lower() not in BROWSER_NOISE_HEADERS
         }
 
-        is_api_request = not any(clean_path.endswith(ext) for ext in ['.js', '.css', '.png', '.ico', '.html'])
+        is_api_request = not any(actual_path.endswith(ext) for ext in ['.js', '.css', '.png', '.ico', '.html'])
 
+        matched_template = None
+        path_variables = {}
 
-        target_url = f"{TARGET_HOST}{clean_path}"
+        if actual_path in self.PATH_TO_CASES_MAPPER:
+            matched_template = actual_path
+
+        else:
+            for template in self.PATH_TO_CASES_MAPPER:
+                result = match_path_template(template, actual_path)
+                if result is not None:
+                    matched_template = template
+                    path_variables = result
+                    break
+
+        full_path = actual_path
+        if parsed_url.query:
+            full_path += f"?{parsed_url.query}"
+
+        target_url = f"{self.host}{full_path}"
         forward_headers = {k: v for k, v in headers.items() if k.lower() != 'host'}
 
         req = urllib.request.Request(
@@ -81,15 +105,17 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
                 res_status = response.status
                 res_headers = response.headers
                 res_body = response.read()
-                if is_api_request and clean_path in self.PATH_TO_CASES_MAPPER:
+
+                if is_api_request and matched_template is not None:
                     self.captured(
-                                    method=method,
-                                    path=clean_path,
-                                    headers=clean_headers,
-                                    req_body=body_str,
-                                    status_code=res_status,
-                                    res_body_bytes=res_body
-                                )
+                        method=method,
+                        path=matched_template,
+                        headers=clean_headers,
+                        req_body=body_str,
+                        status_code=res_status,
+                        res_body_bytes=res_body,
+                        path_variables=path_variables,
+                    )
 
                 self.send_response(res_status)
                 for k, v in res_headers.items():
@@ -101,8 +127,22 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
 
 
         except urllib.error.HTTPError as e:
-            self.send_response(e.code)
             err_body = e.read()
+            err_status = e.status
+
+            if is_api_request and matched_template is not None:
+                self.captured(
+                    method=method,
+                    path=matched_template,
+                    headers=clean_headers,
+                    req_body=body_str,
+                    status_code=err_status,
+                    res_body_bytes=err_body,
+                    path_variables=path_variables,
+                )
+            
+            self.send_response(e.code)
+
             for k, v in e.headers.items():
                 if k.lower() not in ['transfer-encoding', 'content-length']:
                     self.send_header(k, v)
@@ -113,8 +153,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_error(502, f"Bad Gateway: Could not connect to {target_url}. Error: {e!s}")
 
-    def captured(self, method, path, headers, req_body, status_code, res_body_bytes):
-        print(f"{self.PATH_TO_CASES_MAPPER=}")
+    def captured(self, method, path, headers, req_body, status_code, res_body_bytes, path_variables):
         print("\n" + "═" * 60)
         print(f"🎯 [CAPTURED API] {method} {path}")
         print("─" * 60)
@@ -137,7 +176,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         print("💻 REPRODUCIBLE cURL:")
         curl_headers = " ".join([f"-H '{k}: {v}'" for k, v in headers.items()])
         curl_data = f" -d '{req_body}'" if req_body else ""
-        print(f"curl -X '{method}' '{TARGET_HOST}{path}' {curl_headers}{curl_data}")
+        print(f"curl -X '{method}' '{self.host}{path}' {curl_headers}{curl_data}")
         print("─" * 60)
         print(f"Status Code: {status_code}")
 
@@ -150,21 +189,49 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
                 print(body_str)
         print("═" * 60 + "\n")
 
-        case_name = input("Enter case name: ")
-        case_name = case_name.replace(" ", "_")
+        answer_question = input("Do you want to save this case? [Y/n]")
 
-        case = TestCase(
-            name=case_name,
-            request_header=headers,
-            request_body=req_body,
-            status_code=status_code
-        )
+        while answer_question.lower() != "y" and answer_question.lower() != "n" and answer_question != "\n":
+            print("Wrong Answer!")
+            answer_question = input("Do you want to save this case? [Y/n]")
 
-        self.PATH_TO_CASES_MAPPER[path].append(case)
+        if answer_question.lower() == "y" or answer_question == "\n":
 
-        print(f"{self.PATH_TO_CASES_MAPPER=}")
-        print(f"{self.yaml_schema.tags["Accounting"][0].cases=}")
-        
+            case_name = input("Enter case name: ")
+            case_name = case_name.replace(" ", "_")
+
+            case = TestCase(
+                name=case_name,
+                request_header=headers,
+                request_body=req_body,
+                status_code=status_code
+            )
+
+            print(f"{self.PATH_TO_TAG_MAPPER=}")
+            test_tag_folder = self.test_module_path / Path(self.PATH_TO_TAG_MAPPER[path])
+            test_tag_folder.mkdir(exist_ok=True)
+
+            init_test_file = test_tag_folder / Path("__init__.py")
+            init_test_file.touch()
+
+            test_file_path.append(test_tag_folder / Path(f"{case_name}.py"))
+
+            test_file_context.append(
+                TEST_CASE_FORMAT_FILE % {"variables": str(path_variables)}
+            )
+
+            self.PATH_TO_CASES_MAPPER[path].append(case)
+
+    def do_CONNECT(self):
+        self.send_error(501, "CONNECT method is not supported by this proxy")
+
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except BrokenPipeError:
+            pass
+        except ConnectionResetError:
+            pass
 
     do_GET = handle_proxy
     do_POST = handle_proxy
@@ -175,28 +242,39 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
     do_OPTIONS = handle_proxy
 
 
-def run_server(host:str, port:int, file_address:str = DEFAULT_YAML_FILE):
-    yaml_syntax = YamlSyntax.from_file(SwagTaceTestFormat, DEFAULT_YAML_FILE)
+def run_server(host:str, port:int, file:str, dir:str):
+    
+    yaml_syntax = YamlSyntax.from_file(SwagTaceTestFormat, file)
 
     handler_class = partial(
         APIRecorderProxyHandler,
-        yaml_syntax
+        yaml_syntax,
+        host,
+        dir
     )
 
-    server_address = ('', LISTEN_PORT)
+    server_address = ('', port)
     httpd = HTTPServer(server_address, handler_class)
-    print(f"🚀 API Recorder Proxy running on http://127.0.0.1:{LISTEN_PORT}")
+    print(f"🚀 API Recorder Proxy running on http://127.0.0.1:{port}")
     print("🎯 Capturing clean API requests for test replay...\n")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nStopping proxy server...")
         httpd.server_close()
-        file_address = Path(file_address)
+
+        answer_question = input("Do you want to save all captured cases? [Y/n]")
+        while answer_question.lower() != "y" and answer_question.lower() != "n" and answer_question != "\n":
+            print("Wrong Answer!")
+            answer_question = input("Do you want to save all captured cases? [Y/n]")
+
+        if answer_question.lower() == "n":
+            return
+
+        file_address = Path(file)
         with file_address.open("w", encoding="utf-8") as f:
                 yaml.dump(yaml_syntax.to_json, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
-
-if __name__ == "__main__":
-    run_server("http://127.0.0.1:8000", 8080, DEFAULT_YAML_FILE)
+        for file, context in zip(test_file_path, test_file_context):
+            file.write_text(context)
 
