@@ -5,7 +5,7 @@ from typing import Any
 
 import requests
 import yaml
-from swagtrace.consts import DEFAULT_TEST_MODULE_FOLDER, DEFAULT_YAML_FILE, prepare_AND_FINAL_FORMAT_FILE
+from swagtrace.consts import DEFAULT_TEST_MODULE_FOLDER, DEFAULT_YAML_FILE, PREPARE_AND_FINAL_FORMAT_FILE
 from swagtrace.yaml_schema import ElementInfo, prepareAndFinal, SwagTaceTestFormat
 
 
@@ -21,7 +21,7 @@ def fetch_openapi(url: str, timeout: float = 10.0) -> dict[str, Any]:
 def extract_endpoints(spec: dict[str, Any]) -> SwagTaceTestFormat:
 
     prepare = prepareAndFinal(execute="echo Starting tests ...")
-    final = prepareAndFinal(execute="test complete")
+    final = prepareAndFinal(execute="echo test complete")
     info = spec.get("info", {})
     openapi = spec.get("openapi", "")
 
@@ -88,8 +88,8 @@ def create_test_module(output_path: str):
     module_path.mkdir()
 
     __init__file.touch()
-    prepare_file.write_text(prepare_AND_FINAL_FORMAT_FILE)
-    final_file.write_text(prepare_AND_FINAL_FORMAT_FILE)
+    prepare_file.write_text(PREPARE_AND_FINAL_FORMAT_FILE)
+    final_file.write_text(PREPARE_AND_FINAL_FORMAT_FILE)
 
 
 def discover_and_save(url: str, output: str):
