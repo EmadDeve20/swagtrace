@@ -3,14 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import requests
+import httpx
 import yaml
 from swagtrace.consts import DEFAULT_TEST_MODULE_FOLDER, DEFAULT_YAML_FILE, PREPARE_AND_FINAL_FORMAT_FILE
 from swagtrace.yaml_schema import ElementInfo, prepareAndFinal, SwagTaceTestFormat
 
 
 def fetch_openapi(url: str, timeout: float = 10.0) -> dict[str, Any]:
-    response = requests.get(url, timeout=timeout)
+    response = httpx.get(url, timeout=timeout)
     response.raise_for_status()
 
     content_type = response.headers.get("content-type", "")
