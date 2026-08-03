@@ -28,6 +28,7 @@ def main():
 
     tests_parser = subparsers.add_parser("run", help="run tests")
     tests_parser.add_argument("--host", type=str, help="API Base url", default="http://127.0.0.1:8000")
+    tests_parser.add_argument("--app", type=str, help="API Base url")
     tests_parser.add_argument("--file", type=str, help="path of swagtrace.yaml file", default=DEFAULT_YAML_FILE)
     tests_parser.add_argument("--dir",  type=str, help="path of test module", default=DEFAULT_TEST_MODULE_FOLDER)
     tests_parser.add_argument("--verbose",  type=bool, help="verbose", default=False)
