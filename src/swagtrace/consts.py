@@ -26,7 +26,7 @@ def main():
 """
 
 
-TEST_CASE_FORMAT_FILE = """from requests import Response
+TEST_CASE_FORMAT_FILE = """from httpx import Response
 
 # -----------------------------------------------------------------------------
 # 1. CONFIGURATION & DYNAMIC VARIABLES
