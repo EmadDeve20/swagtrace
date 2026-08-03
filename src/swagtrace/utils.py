@@ -1,4 +1,74 @@
+from typing import Optional, Any
+
+from types import ModuleType
+
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
 import re
+import importlib
+import sys
+import logging
+import httpx
+
+from asgiref.sync import async_to_sync
+
+class SyncASGITransport(httpx.ASGITransport):
+
+    def handle_request(self, *args, **kwargs):
+        return async_to_sync(self.handle_async_request)(*args, **kwargs)
+
+
+def load_module(module_path: str, project_root: Optional[str] = None):
+    path = Path(module_path).resolve()
+    
+    if not path.exists():
+        raise FileNotFoundError(f"❌ File '{module_path}' Does not exist!")
+
+    if project_root is None:
+        project_root = str(path.parent)
+    else:
+        project_root = str(Path(project_root).resolve())
+
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    
+    module_name = path.stem
+    
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    
+    return module
+    
+
+
+def run_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kwargs):
+    if hasattr(module, func):
+        if verbose:
+            print(f"▶ Running {func} function: {module}")
+        getattr(module, func)(*args, **kwargs)
+    else:
+        print(f"⚠ {func} Function Does not exist in {func} file!")
+
+
+def load_variables_module(module:ModuleType, var_name: str = "VARIABLES") -> dict[str, Any]:
+
+    if hasattr(module, var_name):
+        variables = getattr(module, var_name)
+        return variables
+    else:
+        return {}
+
+
+def project_banner_information(openapi:str, info: dict):
+
+    print(f"OpenAPI: {openapi}")
+
+    for k, v in info.items():
+        print(f"{k}: {v}")
 
 
 def get_variables(text:str, vars:set = {}) -> set[str]:
@@ -27,9 +97,9 @@ def set_variables_in_data(data:str|dict, vars:dict, global_vars:dict) -> str | d
 
         for vn in variables_name:
             if vn in vars:
-                data = data.replace(f"{{{vn}}}", vars[vn])
+                data = data.replace(f"{{{vn}}}", str(vars[vn]))
             elif vn in global_vars:
-                data = data.replace(f"{{{vn}}}", global_vars[vn])
+                data = data.replace(f"{{{vn}}}", str(global_vars[vn]))
 
     elif isinstance(data, dict):
 
@@ -37,10 +107,12 @@ def set_variables_in_data(data:str|dict, vars:dict, global_vars:dict) -> str | d
             variables_name =  get_variables(val)
 
             for vn in variables_name:
+
                 if vn in vars:
-                    data[key] = vars[vn]
+                    data[key] = data[key].replace(f"{{{vn}}}", str(vars[vn]))
+
                 elif vn in global_vars:
-                    data = global_vars[vn]
+                    data[key] = data[key].replace(f"{{{vn}}}", str(global_vars[vn]))
 
     return data
 
@@ -69,3 +141,49 @@ def match_path_template(template: str, actual_path: str) -> dict | None:
     if match:
         return match.groupdict()
     return None
+
+
+def get_test_client(
+    host: Optional[str] = None, 
+    app: Optional[str] = None
+) -> httpx.Client:
+
+    # In-Memory Mode
+    if app:
+        module_path, app_name = app.split(":")
+
+        if not module_path.endswith(".py"):
+            module_path += ".py"
+
+        module = load_module(module_path)
+
+        app = getattr(module, app_name)
+
+        # transport = SyncASGITransport(app=app)
+        return TestClient(app)
+    
+    # Network Mode
+    if host:
+        return httpx.Client(base_url=host.rstrip('/'))
+
+
+    raise ValueError("Either 'host' or 'app' parameter must be provided.")
+
+
+def configure_logging(level: str = "WARNING"):
+
+    log_level = getattr(logging, level.upper(), logging.WARNING)
+
+    noisy_loggers = [
+        "httpx",
+        "httpcore",
+        "uvicorn",
+        "uvicorn.access",
+        "uvicorn.error",
+        "midelware",
+        "fastapi",
+    ]
+
+    for logger_name in noisy_loggers:
+        logging.getLogger(logger_name).setLevel(log_level)
+
