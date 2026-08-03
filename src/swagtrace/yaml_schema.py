@@ -10,8 +10,10 @@ class prepareAndFinal(Common):
 class TestCase(Common):
     name: str
     request_header: dict
+    query_params: dict | None
     request_body: dict | str
     status_code: int
+    response_content: str | None
 
 class ElementInfo(Common):
     method: str
