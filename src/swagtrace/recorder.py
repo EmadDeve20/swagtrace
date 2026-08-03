@@ -25,7 +25,7 @@ BROWSER_NOISE_HEADERS = {
     "sec-ch-ua-bitness", "sec-ch-ua-full-version", "sec-ch-ua-full-version-list",
     "sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site", "sec-fetch-user",
     "referer", "origin", "priority", "purpose", "upgrade-insecure-requests",
-    "dnt", "sec-gpc", "cache-control", "pragma", "if-none-match", "if-modified-since",
+    "dnt", "sec-gpc", "cache-control", "pragma", "if-none-match", "if-modified-since", "Content-Length",
 }
 
 test_file_path:list[Path] = []
@@ -58,8 +58,11 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         if not actual_path.startswith("/"):
             actual_path = "/" + actual_path
 
-        # TODO: Also Save query params in Case Template
         query_params = parse_qsl(parsed_url.query)
+        if query_params:
+            query_params = {query[0]:query[1] for query in query_params}
+        else:
+            query_params = {}
 
         content_length = int(headers.get('Content-Length', 0))
         body_bytes = self.rfile.read(content_length) if content_length > 0 else b""
@@ -115,6 +118,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
                         status_code=res_status,
                         res_body_bytes=res_body,
                         path_variables=path_variables,
+                        query_params=query_params,
                     )
 
                 self.send_response(res_status)
@@ -139,6 +143,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
                     status_code=err_status,
                     res_body_bytes=err_body,
                     path_variables=path_variables,
+                    query_params=query_params,
                 )
             
             self.send_response(e.code)
@@ -153,7 +158,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_error(502, f"Bad Gateway: Could not connect to {target_url}. Error: {e!s}")
 
-    def captured(self, method, path, headers, req_body, status_code, res_body_bytes, path_variables):
+    def captured(self, method, path, headers, req_body, status_code, res_body_bytes, path_variables, query_params):
         print("\n" + "═" * 60)
         print(f"🎯 [CAPTURED API] {method} {path}")
         print("─" * 60)
@@ -180,13 +185,13 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         print("─" * 60)
         print(f"Status Code: {status_code}")
 
-        body_str = res_body_bytes.decode('utf-8', errors='ignore') if res_body_bytes else ""
-        if body_str:
+        res_body_str = res_body_bytes.decode('utf-8', errors='ignore') if res_body_bytes else ""
+        if res_body_str:
             print("📦 RESPONSE BODY:")
             try:
-                print(json.dumps(json.loads(body_str), indent=2, ensure_ascii=False))
+                print(json.dumps(json.loads(res_body_str), indent=2, ensure_ascii=False))
             except Exception:
-                print(body_str)
+                print(res_body_str)
         print("═" * 60 + "\n")
 
         answer_question = input("Do you want to save this case? [Y/n]")
@@ -197,17 +202,27 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
 
         if answer_question.lower() == "y" or answer_question == "\n":
 
+            answer_question = input("Also Save Response Content? [Y/n]")
+
+            while answer_question.lower() != "y" and answer_question.lower() != "n" and answer_question != "\n":
+                print("Wrong Answer!")
+                answer_question = input("Also Save Response Content? [Y/n]")
+
+            if answer_question.lower() == "n":
+                res_body_str =  None
+
             case_name = input("Enter case name: ")
             case_name = case_name.replace(" ", "_")
 
             case = TestCase(
                 name=case_name,
+                query_params=query_params,
                 request_header=headers,
                 request_body=req_body,
-                status_code=status_code
+                status_code=status_code,
+                response_content=res_body_str
             )
 
-            print(f"{self.PATH_TO_TAG_MAPPER=}")
             test_tag_folder = self.test_module_path / Path(self.PATH_TO_TAG_MAPPER[path])
             test_tag_folder.mkdir(exist_ok=True)
 
