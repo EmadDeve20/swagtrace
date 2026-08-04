@@ -3,8 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from importlib.resources import files
+
+import shutil
+
+
 import httpx
 import yaml
+
 from swagtrace.consts import DEFAULT_TEST_MODULE_FOLDER, DEFAULT_YAML_FILE, PREPARE_AND_FINAL_FORMAT_FILE
 from swagtrace.schemas.yaml_schema import ElementInfo, prepareAndFinal, SwagTaceTestFormat
 
@@ -92,6 +98,13 @@ def create_test_module(output_path: str):
     final_file.write_text(PREPARE_AND_FINAL_FORMAT_FILE)
 
 
+def init_config_file(output_path:str):
+    template_path = Path(files("swagtrace.templates").joinpath("config.toml"))
+    target_path = output_path / Path("swagtrace.toml")
+    
+    shutil.copy(template_path, target_path)
+
+
 def discover_and_save(url: str, output: str):
     print(f"Fetching OpenAPI from: {url}")
     spec = fetch_openapi(url)
@@ -104,5 +117,8 @@ def discover_and_save(url: str, output: str):
 
     print("Creating Test Module ...")
     create_test_module(output)
+
+    print("Initializing Config File ...")
+    init_config_file(output)
 
 
