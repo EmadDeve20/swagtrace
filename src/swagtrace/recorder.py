@@ -2,7 +2,7 @@ import json
 import urllib.error
 import urllib.request
 import pprint
-
+import yaml
 
 from urllib.parse import parse_qsl
 from functools import partial
@@ -287,4 +287,9 @@ def run_server(host:str, port:int, file:str, dir:str):
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nStopping proxy server...")
+
+        file_address = Path(file)
+        with file_address.open("w", encoding="utf-8") as f:
+            yaml.dump(yaml_syntax.to_json, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+
         httpd.server_close()
