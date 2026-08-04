@@ -12,13 +12,6 @@ import sys
 import logging
 import httpx
 
-from asgiref.sync import async_to_sync
-
-class SyncASGITransport(httpx.ASGITransport):
-
-    def handle_request(self, *args, **kwargs):
-        return async_to_sync(self.handle_async_request)(*args, **kwargs)
-
 
 def load_module(module_path: str, project_root: Optional[str] = None):
     path = Path(module_path).resolve()
@@ -159,7 +152,6 @@ def get_test_client(
 
         app = getattr(module, app_name)
 
-        # transport = SyncASGITransport(app=app)
         return TestClient(app)
     
     # Network Mode
