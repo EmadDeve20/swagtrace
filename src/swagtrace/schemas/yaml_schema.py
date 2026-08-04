@@ -1,13 +1,10 @@
-from pydantic import BaseModel, ConfigDict
+from .common import BaseForbiddenExtraSchema
 
 
-class Common(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-class prepareAndFinal(Common):
+class prepareAndFinal(BaseForbiddenExtraSchema):
     execute: str
 
-class TestCase(Common):
+class TestCase(BaseForbiddenExtraSchema):
     name: str
     request_header: dict
     query_params: dict | None
@@ -15,7 +12,7 @@ class TestCase(Common):
     status_code: int
     response_content: str | None
 
-class ElementInfo(Common):
+class ElementInfo(BaseForbiddenExtraSchema):
     method: str
     path: str
     operation_id: str|None
@@ -23,7 +20,7 @@ class ElementInfo(Common):
     description: str|None
     cases: list[TestCase]
 
-class SwagTaceTestFormat(Common):
+class SwagTaceTestFormat(BaseForbiddenExtraSchema):
     openapi: str
     info: dict
     prepare: prepareAndFinal
