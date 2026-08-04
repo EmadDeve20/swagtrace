@@ -12,6 +12,8 @@ import sys
 import logging
 import httpx
 
+from swagtrace.config import get_config
+
 
 def load_module(module_path: str, project_root: Optional[str] = None):
     path = Path(module_path).resolve()
@@ -162,20 +164,17 @@ def get_test_client(
     raise ValueError("Either 'host' or 'app' parameter must be provided.")
 
 
-def configure_logging(level: str = "WARNING"):
+def configure_logging():
 
-    log_level = getattr(logging, level.upper(), logging.WARNING)
+    config = get_config()
 
-    noisy_loggers = [
-        "httpx",
-        "httpcore",
-        "uvicorn",
-        "uvicorn.access",
-        "uvicorn.error",
-        "midelware",
-        "fastapi",
-    ]
+    logs_level = config.project.logging.model_dump()
 
-    for logger_name in noisy_loggers:
-        logging.getLogger(logger_name).setLevel(log_level)
+    for level in logs_level:
+
+        log_level = getattr(logging, level.upper(), logging.WARNING)
+
+        for logger_name in logs_level[level]:
+
+            logging.getLogger(logger_name).setLevel(log_level)
 
