@@ -3,13 +3,22 @@ from swagtrace.initializer import discover_and_save
 from swagtrace.recorder import run_server
 from swagtrace.tester import run_tests
 from swagtrace.consts import DEFAULT_YAML_FILE, DEFAULT_TEST_MODULE_FOLDER
+from swagtrace.config import load_config
 
 
 def main():
-    
+
+    common_parser = argparse.ArgumentParser(add_help=False)
+    common_parser.add_argument(
+        "--config",
+        default="swagtrace.toml",
+        help="Path to config file",
+    )
+
     parser = argparse.ArgumentParser(
         prog="swagtrace", 
-        description="SwagTrace - API Test Recorder & Runner"
+        description="SwagTrace - API Test Recorder & Runner",
+        parents=[common_parser]
     )
     
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -40,6 +49,8 @@ def main():
 
     if hasattr(args, "func"):
         kwargs = {arg[0]:arg[1] for arg in args._get_kwargs() if arg[0] != "command" and arg[0] != "func"} 
+        config = kwargs.pop("config")
+        load_config(config)
         return args.func(**kwargs)
     else:
         parser.print_help()
