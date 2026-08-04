@@ -1,36 +1,28 @@
 import json
 import urllib.error
 import urllib.request
-from urllib.parse import parse_qsl
-import yaml
+import pprint
 
+
+from urllib.parse import parse_qsl
 from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 from pathlib import Path
+from importlib.resources import files
+from string import Template
 
 from yaml_syntax.syntax import YamlSyntax
 
 from swagtrace.schemas.yaml_schema import SwagTaceTestFormat, TestCase
 from swagtrace.utils import  match_path_template
 from swagtrace.consts import TEST_CASE_FORMAT_FILE
+from swagtrace.config import get_config
 
 
-# TODO: Use Noise Headers in a config file 
-BROWSER_NOISE_HEADERS = {
-    "host", "connection", "keep-alive", "proxy-connection", "proxy-authorization",
-    "te", "trailer", "transfer-encoding", "upgrade", "user-agent", "accept-language",
-    "accept-encoding", "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
-    "sec-ch-ua-platform-version", "sec-ch-ua-arch", "sec-ch-ua-model",
-    "sec-ch-ua-bitness", "sec-ch-ua-full-version", "sec-ch-ua-full-version-list",
-    "sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site", "sec-fetch-user",
-    "referer", "origin", "priority", "purpose", "upgrade-insecure-requests",
-    "dnt", "sec-gpc", "cache-control", "pragma", "if-none-match", "if-modified-since", "Content-Length",
-}
 
-test_file_path:list[Path] = []
-test_file_context:list[str] = []
 
+# TODO: This is not a clean structure! Create an independent method or class to store and create test files.
 class APIRecorderProxyHandler(BaseHTTPRequestHandler):
 
     def __init__(self, yaml_syntax:YamlSyntax, host:str, test_module_path:str, *args, **kwargs):
@@ -46,6 +38,12 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         self.PATH_TO_TAG_MAPPER: dict[str, str] = {
             el.path:tag  for tag, elements in self.yaml_schema.tags.items() for el in elements
         }
+
+        config = get_config()
+
+        # TODO: Also use variables of recorder
+        self.BROWSER_NOISE_HEADERS = [noise.lower() for noise in config.recorder.header_noise]
+        self.IS_ASYNC_FORMAT = config.project.type == "async"
 
         super().__init__(*args, **kwargs)
 
@@ -70,13 +68,13 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
 
         clean_headers = {
             k: v for k, v in headers.items() 
-            if k.lower() not in BROWSER_NOISE_HEADERS
+            if k.lower() not in self.BROWSER_NOISE_HEADERS
         }
 
         is_api_request = not any(actual_path.endswith(ext) for ext in ['.js', '.css', '.png', '.ico', '.html'])
 
         matched_template = None
-        path_variables = {}
+        variables = {}
 
         if actual_path in self.PATH_TO_CASES_MAPPER:
             matched_template = actual_path
@@ -86,7 +84,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
                 result = match_path_template(template, actual_path)
                 if result is not None:
                     matched_template = template
-                    path_variables = result
+                    variables = result
                     break
 
         full_path = actual_path
@@ -117,7 +115,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
                         req_body=body_str,
                         status_code=res_status,
                         res_body_bytes=res_body,
-                        path_variables=path_variables,
+                        variables=variables,
                         query_params=query_params,
                     )
 
@@ -142,7 +140,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
                     req_body=body_str,
                     status_code=err_status,
                     res_body_bytes=err_body,
-                    path_variables=path_variables,
+                    variables=variables,
                     query_params=query_params,
                 )
             
@@ -158,7 +156,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_error(502, f"Bad Gateway: Could not connect to {target_url}. Error: {e!s}")
 
-    def captured(self, method, path, headers, req_body, status_code, res_body_bytes, path_variables, query_params):
+    def captured(self, method, path, headers, req_body, status_code, res_body_bytes, variables, query_params):
         print("\n" + "═" * 60)
         print(f"🎯 [CAPTURED API] {method} {path}")
         print("─" * 60)
@@ -229,12 +227,25 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
             init_test_file = test_tag_folder / Path("__init__.py")
             init_test_file.touch()
 
-            test_file_path.append(test_tag_folder / Path(f"{case_name}.py"))
+            test_file_path = test_tag_folder / Path(f"{case_name}.py")
 
-            test_file_context.append(
-                TEST_CASE_FORMAT_FILE % {"variables": str(path_variables)}
-            )
+            formatted_vars = pprint.pformat(variables, indent=4)
 
+            async_prefix = "async " if self.IS_ASYNC_FORMAT else ""
+
+            template_path = Path(files("swagtrace.templates").joinpath("test_script.py.tmpl"))
+            template_content = template_path.read_text()
+
+            template = Template(template_content)
+            rendered_code = template.substitute(variables_dict=formatted_vars,
+                                                async_prefix=async_prefix)
+            
+            # ۴. نوشتن در فایل مقصد
+            with open(test_file_path, "w", encoding="utf-8") as f:
+                f.write(rendered_code)
+
+            
+            # TODO: add validation if case name already exist!
             self.PATH_TO_CASES_MAPPER[path].append(case)
 
     def do_CONNECT(self):
@@ -277,19 +288,3 @@ def run_server(host:str, port:int, file:str, dir:str):
     except KeyboardInterrupt:
         print("\nStopping proxy server...")
         httpd.server_close()
-
-        answer_question = input("Do you want to save all captured cases? [Y/n]")
-        while answer_question.lower() != "y" and answer_question.lower() != "n" and answer_question != "\n":
-            print("Wrong Answer!")
-            answer_question = input("Do you want to save all captured cases? [Y/n]")
-
-        if answer_question.lower() == "n":
-            return
-
-        file_address = Path(file)
-        with file_address.open("w", encoding="utf-8") as f:
-                yaml.dump(yaml_syntax.to_json, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
-
-        for file, context in zip(test_file_path, test_file_context):
-            file.write_text(context)
-
