@@ -1,0 +1,61 @@
+[project]
+type = "sync"           # ["sync", "async"]
+transport = "wsgi"      # ["asgi", "wsgi"]
+record_target = "yaml"     # ["yaml", "python"]
+
+[project.logging]
+debug = []
+info = []
+warning = []
+error = [
+    # FastAPI & Starlette & Servers
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "uvicorn.error",
+
+    # Flask & Werkzeug
+    "flask",
+    "werkzeug",
+
+    # Django
+    "django",
+    "django.request",
+
+    # HTTP Clients & Transports
+    "httpx",
+    "httpcore",
+]
+
+
+[recorder]
+header_noise = [
+    "host", "connection", "keep-alive", "proxy-connection", "proxy-authorization",
+    "te", "trailer", "transfer-encoding", "upgrade", "user-agent", "accept-language",
+    "accept-encoding", "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
+    "sec-ch-ua-platform-version", "sec-ch-ua-arch", "sec-ch-ua-model",
+    "sec-ch-ua-bitness", "sec-ch-ua-full-version", "sec-ch-ua-full-version-list",
+    "sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site", "sec-fetch-user",
+    "referer", "origin", "priority", "purpose", "upgrade-insecure-requests",
+    "dnt", "sec-gpc", "cache-control", "pragma", "if-none-match", "if-modified-since", 
+    "content-length",
+]
+
+[recorder.variables]
+headers = [
+    "authorization",
+    "x-api-key",
+]
+
+query_params = [
+    ".*id",
+    "token",
+]
+
+body_keys = [
+    ".*id",
+    "username",
+    "password",
+    "email",
+    "access_token",
+]
