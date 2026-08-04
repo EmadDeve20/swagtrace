@@ -4,7 +4,7 @@ from types import ModuleType
 
 from pathlib import Path
 
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 import re
 import importlib
@@ -45,6 +45,15 @@ def run_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kw
         if verbose:
             print(f"▶ Running {func} function: {module}")
         getattr(module, func)(*args, **kwargs)
+    else:
+        print(f"⚠ {func} Function Does not exist in {func} file!")
+
+
+async def arun_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kwargs):
+    if hasattr(module, func):
+        if verbose:
+            print(f"▶ Running {func} function: {module}")
+        await getattr(module, func)(*args, **kwargs)
     else:
         print(f"⚠ {func} Function Does not exist in {func} file!")
 
@@ -138,6 +147,8 @@ def match_path_template(template: str, actual_path: str) -> dict | None:
     return None
 
 
+# TODO: Improve this function to yield and handle for transporter in config file [asgi, wsgi]
+# also handle for project type [async, sync]
 def get_test_client(
     host: Optional[str] = None, 
     app: Optional[str] = None
