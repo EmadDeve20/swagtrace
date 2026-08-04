@@ -9,7 +9,7 @@ from httpx import Client
 
 from yaml_syntax.syntax import YamlSyntax
 
-from swagtrace.yaml_schema import ElementInfo, prepareAndFinal, SwagTaceTestFormat
+from swagtrace.schemas.yaml_schema import ElementInfo, prepareAndFinal, SwagTaceTestFormat
 from swagtrace.utils import (
 set_variables_in_data,
 get_test_client,

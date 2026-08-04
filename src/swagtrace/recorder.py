@@ -11,7 +11,7 @@ from pathlib import Path
 
 from yaml_syntax.syntax import YamlSyntax
 
-from swagtrace.yaml_schema import SwagTaceTestFormat, TestCase
+from swagtrace.schemas.yaml_schema import SwagTaceTestFormat, TestCase
 from swagtrace.utils import  match_path_template
 from swagtrace.consts import TEST_CASE_FORMAT_FILE
 

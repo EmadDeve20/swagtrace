@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 import yaml
 from swagtrace.consts import DEFAULT_TEST_MODULE_FOLDER, DEFAULT_YAML_FILE, PREPARE_AND_FINAL_FORMAT_FILE
-from swagtrace.yaml_schema import ElementInfo, prepareAndFinal, SwagTaceTestFormat
+from swagtrace.schemas.yaml_schema import ElementInfo, prepareAndFinal, SwagTaceTestFormat
 
 
 def fetch_openapi(url: str, timeout: float = 10.0) -> dict[str, Any]:
