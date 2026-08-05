@@ -234,21 +234,22 @@ def run_tests(host:str|None, app:str|None, file:str, dir:str, verbose:bool) -> i
 
     config = get_config()
 
+    yaml_serialized = YamlSyntax.from_file(SwagTaceTestFormat, file)
+    
+    test_sections:SwagTaceTestFormat = yaml_serialized.serialized_data
+
+    project_banner_information(test_sections.openapi, test_sections.info)
+
+    prepare_tests(test_sections.prepare, str(Path(dir) / Path("prepare.py")), verbose=verbose)
+
     try:
         client = get_test_client(host=host, app=app)
     except Exception as e:
         print(e)
         return 1
 
-    yaml_serialized = YamlSyntax.from_file(SwagTaceTestFormat, file)
-
-    test_sections:SwagTaceTestFormat = yaml_serialized.serialized_data
-
-    project_banner_information(test_sections.openapi, test_sections.info)
-
     configure_logging()
 
-    prepare_tests(test_sections.prepare, str(Path(dir) / Path("prepare.py")), verbose=verbose)
 
     if config.project.type == "async":
         exit_code = asyncio.run(arun_tags_cases(client, test_sections.tags, dir, verbose))
