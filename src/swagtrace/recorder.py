@@ -240,7 +240,6 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
             rendered_code = template.substitute(variables_dict=formatted_vars,
                                                 async_prefix=async_prefix)
             
-            # ۴. نوشتن در فایل مقصد
             with open(test_file_path, "w", encoding="utf-8") as f:
                 f.write(rendered_code)
 
