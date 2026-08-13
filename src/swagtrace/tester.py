@@ -4,7 +4,6 @@ import subprocess
 import time
 from pathlib import Path
 
-from asgiref.sync import sync_to_async
 from httpx import Client
 from yaml_syntax.syntax import YamlSyntax
 
@@ -22,7 +21,9 @@ from swagtrace.utils import (
     project_banner_information,
     run_func_module,
     set_variables_in_data,
-    arun_func_module
+    arun_func_module,
+    load_app,
+    print_error_line,
 )
 
 GLOBAL_VARIABLES = {}
@@ -33,20 +34,11 @@ def prepare_tests(prepare:prepareAndFinal, file:str, verbose:bool):
  
     module = load_module(module_path=file)
 
-    run_func_module(module=module, func="prepare", verbose=verbose)
-
-    GLOBAL_VARIABLES = load_variables_module(module=module)
-
     result = subprocess.run(prepare.execute, shell=True, text=True, capture_output=True)
 
-    print(result.stdout.strip())
+    run_func_module(module=module, func="main", verbose=verbose, **{"cp": result})
 
-    if result.stderr:
-        print(result.stderr.strip())
-        raise RuntimeError(f"Failed on prepare section test: {result.stderr.strip()}")
-
-    run_func_module(module=module, func="main", verbose=verbose)
-    
+    GLOBAL_VARIABLES = load_variables_module(module=module)
 
 
 def run_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir:str, verbose:bool) -> int:
@@ -139,18 +131,17 @@ async def arun_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir
     start_total_time = time.time()
 
     for tag, elements in tags.items():
-        print(f"Testing {tag} ...")
+        print(f"Testing {tag} ...", flush=True)
 
         for el in elements:
 
             if verbose:
-                print(f" summary = {el.summary}")
-                print(f"  description = {el.description}")
+                print(f" summary = {el.summary}, flush=True")
+                print(f"  description = {el.description}", flush=True)
 
             path = el.path
             method = el.method
             for case in el.cases:
-                start_test_time = time.time()
                 headers = case.request_header
                 body = case.request_body
                 test_path = f"{dir}/{tag}/{case.name}.py"
@@ -163,6 +154,8 @@ async def arun_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir
 
                     url = set_variables_in_data(path, variables, GLOBAL_VARIABLES)
                     body = set_variables_in_data(body, variables, GLOBAL_VARIABLES)
+
+                    start_test_time = time.time()
 
                     # TODO: Handle if body is not JSON
                     response = client.request(method=method,
@@ -180,30 +173,38 @@ async def arun_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir
 
                     await arun_func_module(module=module, func="main", verbose=verbose, **{"response": response})
 
-                    await arun_func_module(module=module, func="finalize", verbose=verbose)
                     duration = round((time.time() - start_test_time) * 1000, 2)
                     passed_test += 1
 
-                    print(f"  ✅ [SUCCESS] Case {case.name} Passed Successfully ({duration}ms)")
+                    print(f"  ✅ [SUCCESS] Case {case.name} Passed Successfully ({duration}ms)", flush=True)
 
                 except AssertionError as e:
                     duration = round((time.time() - start_test_time) * 1000, 2)
-                    print(f"  ❌ [FAILED] Case {case.name} ({duration}ms)")
-                    print(f"         └── AssertionError: {e}")
+                    print(f"  ❌ [FAILED] Case {case.name} ({duration}ms)", flush=True)
+                    print(f"         └── AssertionError: {e}", flush=True)
                     failed_test += 1
 
                 except Exception as e:
                     duration = round((time.time() - start_test_time) * 1000, 2)
-                    print(f"  ❌ [Error] Case {case.name} ({duration}ms)")
-                    print(f"         └── {type(e).__name__}: {e}")
+                    print(f"  ❌ [Error] Case {case.name} ({duration}ms)", flush=True)
+                    print(f"         └── {type(e).__name__}: {e}", flush=True)
+                    print_error_line(test_path, e)
                     failed_test += 1
+
+                finally:
+                    try:
+                        await arun_func_module(module=module, func="finalize", verbose=verbose)
+                    except Exception as e:
+                        print(f"  ⚠️ [Warning]: Failed to run finalize function at the end of the test!")
+                        print(f"         └── {type(e).__name__}: {e}", flush=True)
+                        print_error_line(test_path, e)
 
     duration = round((time.time() - start_total_time) * 1000, 2)
 
-    print("=" * 60)
-    print(f"Test Finished ({duration}ms)")
-    print(f"Result: total: {passed_test + failed_test} passed: {passed_test} failed: {failed_test}")
-    print("=" * 60)
+    print("=" * 60, flush=True)
+    print(f"Test Finished ({duration}ms)", flush=True)
+    print(f"Result: total: {passed_test + failed_test} passed: {passed_test} failed: {failed_test}", flush=True)
+    print("=" * 60, flush=True)
 
     if failed_test:
         return 1
@@ -215,22 +216,22 @@ def finale_tests(final:prepareAndFinal, file:str, verbose:bool):
     
     module = load_module(module_path=file)
 
-    run_func_module(module=module, func="prepare", verbose=verbose)
-
     result = subprocess.run(final.execute, shell=True, text=True, capture_output=True)
 
-    print(result.stdout.strip())
-
-    if result.stderr:
-        print(result.stderr.strip())
-        raise RuntimeError(f"Failed on section final test: {result.stderr.strip()}")
-
-    run_func_module(module=module, func="main", verbose=verbose)
+    run_func_module(module=module, func="main", verbose=verbose, **{"cp": result})
 
 
+# TODO: Update Workflow if need run app first and app like FastAPI need DB
+# because app load first and if DB will generate on prepare stage, it can got and error
 def run_tests(host:str|None, app:str|None, file:str, dir:str, verbose:bool) -> int:
 
     exit_code = 0
+    app_module = None
+    app_name = None
+
+    if app:
+        app_module, app_name = load_app(app_path=app)
+        app = getattr(app_module, app_name)
 
     config = get_config()
 
@@ -238,7 +239,12 @@ def run_tests(host:str|None, app:str|None, file:str, dir:str, verbose:bool) -> i
     
     test_sections:SwagTaceTestFormat = yaml_serialized.serialized_data
 
-    project_banner_information(test_sections.openapi, test_sections.info)
+    try:
+        project_banner_information(test_sections.openapi, test_sections.info)
+    except Exception as e:
+        finale_tests(test_sections.final, str(Path(dir) / Path("final.py")), verbose=verbose)
+        return 1
+
 
     prepare_tests(test_sections.prepare, str(Path(dir) / Path("prepare.py")), verbose=verbose)
 
