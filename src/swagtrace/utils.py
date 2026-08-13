@@ -1,3 +1,8 @@
+import re
+import traceback
+import linecache
+import os
+
 from typing import Optional, Any
 
 from types import ModuleType
@@ -101,9 +106,9 @@ def set_variables_in_data(data:str|dict, vars:dict, global_vars:dict) -> str | d
 
         for vn in variables_name:
             if vn in vars:
-                data = data.replace(f"{{{vn}}}", str(vars[vn]))
+                data = data.replace(f"{{{vn}}}", vars[vn])
             elif vn in global_vars:
-                data = data.replace(f"{{{vn}}}", str(global_vars[vn]))
+                data = data.replace(f"{{{vn}}}", global_vars[vn])
 
     elif isinstance(data, dict):
 
@@ -113,10 +118,10 @@ def set_variables_in_data(data:str|dict, vars:dict, global_vars:dict) -> str | d
             for vn in variables_name:
 
                 if vn in vars:
-                    data[key] = data[key].replace(f"{{{vn}}}", str(vars[vn]))
+                    data[key] = data[key].replace(f"{{{vn}}}", vars[vn])
 
                 elif vn in global_vars:
-                    data[key] = data[key].replace(f"{{{vn}}}", str(global_vars[vn]))
+                    data[key] = data[key].replace(f"{{{vn}}}", global_vars[vn])
 
     return data
 
@@ -147,23 +152,27 @@ def match_path_template(template: str, actual_path: str) -> dict | None:
     return None
 
 
+def load_app(app_path:str) -> tuple[ModuleType, Any]:
+
+    module_path, app_name = app_path.split(":")
+    
+    if not module_path.endswith(".py"):
+        module_path += ".py"
+
+    module = load_module(module_path)
+
+    return module, app_name
+    
+
 # TODO: Improve this function to yield and handle for transporter in config file [asgi, wsgi]
 # also handle for project type [async, sync]
 def get_test_client(
     host: Optional[str] = None, 
-    app: Optional[str] = None
+    app: Optional[Any] = None
 ) -> httpx.Client:
 
     # In-Memory Mode
     if app:
-        module_path, app_name = app.split(":")
-
-        if not module_path.endswith(".py"):
-            module_path += ".py"
-
-        module = load_module(module_path)
-
-        app = getattr(module, app_name)
 
         return TestClient(app)
     
@@ -189,3 +198,31 @@ def configure_logging():
 
             logging.getLogger(logger_name).setLevel(log_level)
 
+
+
+def print_error_line(test_path: str | Path, e:Exception):
+    
+    tb = traceback.extract_tb(e.__traceback__)
+
+    frame = None
+    for f in reversed(tb):
+        if os.path.abspath(f.filename) == os.path.abspath(test_path):
+            frame = f
+            break
+
+    if frame:
+        print(f"\n         File: {frame.filename}")
+        print(f"         Line: {frame.lineno}\n")
+
+        start = max(frame.lineno - 2, 1)
+        end = frame.lineno + 2
+
+        for lineno in range(start, end + 1):
+            code = linecache.getline(frame.filename, lineno).rstrip()
+
+            if lineno == frame.lineno:
+                print(f"      >>> {lineno:4} | {code}")
+            else:
+                print(f"          {lineno:4} | {code}")
+    else:
+        traceback.print_exc()
