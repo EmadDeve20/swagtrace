@@ -33,7 +33,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         self.yaml_schema = yaml_syntax.serialized_data
 
         self.PATH_TO_CASES_MAPPER: dict[str, list[TestCase]] = {
-            el.path:el.cases  for _, elements in self.yaml_schema.tags.items() for el in elements
+            f"{el.method.lower()}-{el.path}":el.cases  for _, elements in self.yaml_schema.tags.items() for el in elements
         }
         self.PATH_TO_TAG_MAPPER: dict[str, str] = {
             el.path:tag  for tag, elements in self.yaml_schema.tags.items() for el in elements
@@ -76,14 +76,14 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         matched_template = None
         variables = {}
 
-        if actual_path in self.PATH_TO_CASES_MAPPER:
+        if f"{method.lower()}-{actual_path}" in self.PATH_TO_CASES_MAPPER:
             matched_template = actual_path
 
         else:
             for template in self.PATH_TO_CASES_MAPPER:
-                result = match_path_template(template, actual_path)
+                result = match_path_template(template, f"{method.lower()}-{actual_path}")
                 if result is not None:
-                    matched_template = template
+                    matched_template = template.split("-")[1]
                     variables = result
                     break
 
@@ -240,13 +240,12 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
             rendered_code = template.substitute(variables_dict=formatted_vars,
                                                 async_prefix=async_prefix)
             
-            # ۴. نوشتن در فایل مقصد
             with open(test_file_path, "w", encoding="utf-8") as f:
                 f.write(rendered_code)
 
             
             # TODO: add validation if case name already exist!
-            self.PATH_TO_CASES_MAPPER[path].append(case)
+            self.PATH_TO_CASES_MAPPER[f"{method.lower()}-{path}"].append(case)
 
     def do_CONNECT(self):
         self.send_error(501, "CONNECT method is not supported by this proxy")
