@@ -1,4 +1,5 @@
-from typing import Optional, Any
+import inspect
+from typing import Optional, Any, Callable, Coroutine
 
 from types import ModuleType
 
@@ -38,6 +39,35 @@ def load_module(module_path: str, project_root: Optional[str] = None):
     
     return module
     
+
+class run_function:
+
+    def __init__(self, func):
+        self.func = func
+
+        if inspect.iscoroutinefunction(func) or inspect.isawaitable(func):
+            self._wrapper = self._async_wrapper
+        else:
+            self._wrapper = self._sync_wrapper
+
+
+    def __call__(self, *args, **kwargs):
+        return self._wrapper(*args, **kwargs)
+
+    def _sync_wrapper(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+    async def _async_wrapper(self, *args, **kwargs):
+        if inspect.isawaitable(self.func) and not inspect.iscoroutinefunction(self.func):
+            return await self.func
+ 
+        return await self.func(*args, **kwargs)
+
+
+    @staticmethod
+    def run(func, *args, **kwrags):
+        new_instance = run_function(func)
+        return new_instance(*args, **kwrags)
 
 
 def run_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kwargs):
