@@ -4,7 +4,7 @@ from functools import wraps
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Coroutine, Awaitable
 
-from swagtrace.utils import run_function
+from swagtrace.utils import function_manager
 
 
 class BaseMockInterface(ABC):
@@ -49,9 +49,9 @@ class MockInterface(BaseMockInterface):
 
         elif self.side_effect:
             if args or kwargs:
-                return run_function.run(self.side_effect, *args, **kwargs) 
+                return function_manager.get_function_address(self.side_effect, *args, **kwargs) 
 
-            return run_function.run(self.side_effect, *self.__args, **self.__kwargs) 
+            return function_manager.get_function_address(self.side_effect, *self.__args, **self.__kwargs) 
 
         return self.data
 
@@ -69,16 +69,16 @@ class mock:
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
             if True:
-                return run_function.run(func, *args, **kwargs)
+                return function_manager.get_function_address(func, *args, **kwargs)
 
-            return run_function.run(self.mock_interface.execute, *args, **kwargs)
+            return function_manager.get_function_address(self.mock_interface.execute, *args, **kwargs)
 
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             if True:
-                return run_function.run(func, *args, **kwargs)
+                return function_manager.get_function_address(func, *args, **kwargs)
 
-            return run_function.run(self.mock_interface.execute, *args, **kwargs)
+            return function_manager.get_function_address(self.mock_interface.execute, *args, **kwargs)
 
         wrapper = async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
 
@@ -88,4 +88,4 @@ class mock:
 
 
     def mock_data(self, *args, **kwargs):
-        return run_function.run(self.mock_interface.execute, *args, **kwargs)
+        return function_manager.get_function_address(self.mock_interface.execute, *args, **kwargs)
