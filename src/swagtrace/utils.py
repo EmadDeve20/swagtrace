@@ -40,14 +40,16 @@ def load_module(module_path: str, project_root: str | None = None):
     return module
     
 
-class run_function:
+class function_manager:
 
     def __init__(self, func):
         self.func = func
 
         if inspect.iscoroutinefunction(func) or inspect.isawaitable(func):
+            self.is_async = True
             self._wrapper = self._async_wrapper
         else:
+            self.is_async = False
             self._wrapper = self._sync_wrapper
 
 
@@ -65,8 +67,18 @@ class run_function:
 
 
     @staticmethod
-    def run(func, *args, **kwrags):
-        new_instance = run_function(func)
+    def get_function_address(func, *args, **kwrags):
+        new_instance = function_manager(func)
+        return new_instance(*args, **kwrags)
+
+
+    @staticmethod
+    async def execute_function(func, *args, **kwrags):
+        new_instance = function_manager(func)
+
+        if new_instance.is_async:
+            return await new_instance(*args, **kwrags)
+
         return new_instance(*args, **kwrags)
 
 
@@ -76,7 +88,7 @@ def run_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kw
             print(f"▶ Running {func} function: {module}")
         getattr(module, func)(*args, **kwargs)
     else:
-        print(f"⚠ {func} Function Does not exist in {func} file!")
+        print(f"⚠ {func} Function Does not exist in {module} file!")
 
 
 async def arun_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kwargs):
