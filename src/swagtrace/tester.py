@@ -123,15 +123,22 @@ def run_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir:str, v
 
 # TODO: I'm going to create a best practice workflow to handle both stnc abd async projects
 # I will use this for my own test and my personal project 
-async def arun_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir:str, verbose:bool) -> int:
+async def arun_tags_cases(
+client:Client,
+tags: dict[str, list[ElementInfo]],
+cases: list[str],
+dir:str,
+verbose:bool) -> int:
+    
     global GLOBAL_VARIABLES
     
     passed_test = 0
     failed_test = 0
     start_total_time = time.time()
 
+    tags = {case:tags.pop(case) for case in cases if case in tags} or tags
+
     for tag, elements in tags.items():
-        print(f"Testing {tag} ...", flush=True)
 
         for el in elements:
 
@@ -147,6 +154,8 @@ async def arun_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir
                 test_path = f"{dir}/{tag}/{case.name}.py"
                 excepted_status = case.status_code
 
+                start_test_time = time.time()
+
                 try:
                     module = load_module(module_path=test_path)
                     await arun_func_module(module=module, func="prepare", verbose=verbose)
@@ -154,8 +163,6 @@ async def arun_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir
 
                     url = set_variables_in_data(path, variables, GLOBAL_VARIABLES)
                     body = set_variables_in_data(body, variables, GLOBAL_VARIABLES)
-
-                    start_test_time = time.time()
 
                     # TODO: Handle if body is not JSON
                     response = client.request(method=method,
@@ -171,7 +178,7 @@ async def arun_tags_cases(client:Client, tags: dict[str, list[ElementInfo]], dir
                         response_content = response.content.decode()
                         assert response_content == expected_response, f"excepted '{expected_response}' response but got {response_content} response!"
 
-                    await arun_func_module(module=module, func="main", verbose=verbose, **{"response": response})
+                    await arun_func_module(module=module, func="main", verbose=verbose, response=response)
 
                     duration = round((time.time() - start_test_time) * 1000, 2)
                     passed_test += 1
@@ -223,7 +230,14 @@ def finale_tests(final:prepareAndFinal, file:str, verbose:bool):
 
 # TODO: Update Workflow if need run app first and app like FastAPI need DB
 # because app load first and if DB will generate on prepare stage, it can got and error
-def run_tests(host:str|None, app:str|None, file:str, dir:str, verbose:bool) -> int:
+def run_tests(
+host:str|None,
+app:str|None,
+file:str,
+dir:str,
+cases:list[str],
+verbose:bool,
+) -> int:
 
     exit_code = 0
     app_module = None
@@ -258,7 +272,7 @@ def run_tests(host:str|None, app:str|None, file:str, dir:str, verbose:bool) -> i
 
 
     if config.project.type == "async":
-        exit_code = asyncio.run(arun_tags_cases(client, test_sections.tags, dir, verbose))
+        exit_code = asyncio.run(arun_tags_cases(client, test_sections.tags, cases, dir, verbose))
     else:
         exit_code = run_tags_cases(client, test_sections.tags, dir, verbose)
 
