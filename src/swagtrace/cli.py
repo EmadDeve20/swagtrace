@@ -40,7 +40,10 @@ def main():
     tests_parser.add_argument("--app", type=str, help="API Base url")
     tests_parser.add_argument("--file", type=str, help="path of swagtrace.yaml file", default=DEFAULT_YAML_FILE)
     tests_parser.add_argument("--dir",  type=str, help="path of test module", default=DEFAULT_TEST_MODULE_FOLDER)
-    tests_parser.add_argument("--verbose",  type=bool, help="verbose", default=False)
+    tests_parser.add_argument("--cases",  nargs="*", help="Name of tags saved in Yaml file", default=[])
+    tests_parser.add_argument("--verbose",  action="store_true", help="verbose", default=False)
+
+
     
     tests_parser.set_defaults(func=run_tests)
 
