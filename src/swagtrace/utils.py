@@ -8,9 +8,12 @@ import sys
 import traceback
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, TypeVar
 
-import httpx
+DATA_OUTPUT = TypeVar("DATA_OUTPUT", str, dict[str, Any], list)
+
+
+import httpx2 as httpx
 from starlette.testclient import TestClient
 
 from swagtrace.config import get_config
@@ -18,7 +21,7 @@ from swagtrace.config import get_config
 
 def load_module(module_path: str, project_root: str | None = None):
     path = Path(module_path).resolve()
-    
+
     if not path.exists():
         raise FileNotFoundError(f"❌ File '{module_path}' Does not exist!")
 
@@ -29,19 +32,18 @@ def load_module(module_path: str, project_root: str | None = None):
 
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
-    
+
     module_name = path.stem
-    
+
     spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
-    
+
     return module
-    
+
 
 class function_manager:
-
     def __init__(self, func):
         self.func = func
 
@@ -52,7 +54,6 @@ class function_manager:
             self.is_async = False
             self._wrapper = self._sync_wrapper
 
-
     def __call__(self, *args, **kwargs):
         return self._wrapper(*args, **kwargs)
 
@@ -60,17 +61,17 @@ class function_manager:
         return self.func(*args, **kwargs)
 
     async def _async_wrapper(self, *args, **kwargs):
-        if inspect.isawaitable(self.func) and not inspect.iscoroutinefunction(self.func):
+        if inspect.isawaitable(self.func) and not inspect.iscoroutinefunction(
+            self.func
+        ):
             return await self.func
- 
-        return await self.func(*args, **kwargs)
 
+        return await self.func(*args, **kwargs)
 
     @staticmethod
     def get_function_address(func, *args, **kwrags):
         new_instance = function_manager(func)
         return new_instance(*args, **kwrags)
-
 
     @staticmethod
     async def execute_function(func, *args, **kwrags):
@@ -82,7 +83,9 @@ class function_manager:
         return new_instance(*args, **kwrags)
 
 
-def run_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kwargs):
+def run_func_module(
+    module: ModuleType, func: str, verbose: bool = False, *args, **kwargs
+):
     if hasattr(module, func):
         if verbose:
             print(f"▶ Running {func} function: {module}")
@@ -91,7 +94,9 @@ def run_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kw
         print(f"⚠ {func} Function Does not exist in {module} file!")
 
 
-async def arun_func_module(module:ModuleType, func:str, verbose:bool=False, *args, **kwargs):
+async def arun_func_module(
+    module: ModuleType, func: str, verbose: bool = False, *args, **kwargs
+):
     if hasattr(module, func):
         if verbose:
             print(f"▶ Running {func} function: {module}")
@@ -100,7 +105,9 @@ async def arun_func_module(module:ModuleType, func:str, verbose:bool=False, *arg
         print(f"⚠ {func} Function Does not exist in {func} file!")
 
 
-def load_variables_module(module:ModuleType, var_name: str = "VARIABLES") -> dict[str, Any]:
+def load_variables_module(
+    module: ModuleType, var_name: str = "VARIABLES"
+) -> dict[str, Any]:
 
     if hasattr(module, var_name):
         variables = getattr(module, var_name)
@@ -109,7 +116,7 @@ def load_variables_module(module:ModuleType, var_name: str = "VARIABLES") -> dic
         return {}
 
 
-def project_banner_information(openapi:str, info: dict):
+def project_banner_information(openapi: str, info: dict):
 
     print(f"OpenAPI: {openapi}")
 
@@ -117,48 +124,34 @@ def project_banner_information(openapi:str, info: dict):
         print(f"{k}: {v}")
 
 
-def get_variables(text:str, vars:set = {}) -> set[str]:
+def set_variables_in_data(
+    data: DATA_OUTPUT, vars: dict, global_vars: dict
+) -> DATA_OUTPUT:
+    pattern = re.compile(r"\{(\w+)\}")
 
-    if len(vars) == 0:
-        vars = set()
+    def replacer(match: re.Match) -> str:
+        key = match.group(1)
 
-    if "{" in text and "}" in text:
-        start_var_idx = text.index("{")
-        end_var_idx = text.index("}")
+        if key in vars:
+            return str(vars[key])
 
-        if start_var_idx > end_var_idx:
-            return vars
+        elif key in global_vars:
+            return str(global_vars[key])
 
-        vars.add(text[start_var_idx+1:end_var_idx])
-
-        return get_variables(text[end_var_idx+1:], vars)
-
-    return vars
-
-
-def set_variables_in_data(data:str|dict, vars:dict, global_vars:dict) -> str | dict:
+        return match.group(0)
 
     if isinstance(data, str):
-        variables_name =  get_variables(data)
-
-        for vn in variables_name:
-            if vn in vars:
-                data = data.replace(f"{{{vn}}}", vars[vn])
-            elif vn in global_vars:
-                data = data.replace(f"{{{vn}}}", global_vars[vn])
+        return pattern.sub(replacer, data)
 
     elif isinstance(data, dict):
-
         for key, val in data.items():
-            variables_name =  get_variables(val)
+            if isinstance(val, (dict, list, str)):
+                data[key] = set_variables_in_data(val, vars, global_vars)
 
-            for vn in variables_name:
-
-                if vn in vars:
-                    data[key] = data[key].replace(f"{{{vn}}}", vars[vn])
-
-                elif vn in global_vars:
-                    data[key] = data[key].replace(f"{{{vn}}}", global_vars[vn])
+    elif isinstance(data, list):
+        for idx, chunk in enumerate(data):
+            if isinstance(chunk, (dict, list, str)):
+                data[idx] = set_variables_in_data(chunk, vars, global_vars)
 
     return data
 
@@ -180,8 +173,8 @@ def match_path_template(template: str, actual_path: str) -> dict | None:
         A dict of captured path parameters on success, otherwise None.
     """
     # Convert {param} placeholders into named regex groups
-    pattern = re.sub(r'\{(\w+)\}', r'(?P<\1>[^/]+)', template)
-    pattern = f'^{pattern}$'
+    pattern = re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", template)
+    pattern = f"^{pattern}$"
 
     match = re.match(pattern, actual_path)
     if match:
@@ -189,34 +182,29 @@ def match_path_template(template: str, actual_path: str) -> dict | None:
     return None
 
 
-def load_app(app_path:str) -> tuple[ModuleType, Any]:
+def load_app(app_path: str) -> tuple[ModuleType, Any]:
 
     module_path, app_name = app_path.split(":")
-    
+
     if not module_path.endswith(".py"):
         module_path += ".py"
 
     module = load_module(module_path)
 
     return module, app_name
-    
+
 
 # TODO: Improve this function to yield and handle for transporter in config file [asgi, wsgi]
 # also handle for project type [async, sync]
-def get_test_client(
-    host: str | None = None, 
-    app: Any | None = None
-) -> httpx.Client:
+def get_test_client(host: str | None = None, app: Any | None = None) -> httpx.Client:
 
     # In-Memory Mode
     if app:
-
         return TestClient(app)
-    
+
     # Network Mode
     if host:
-        return httpx.Client(base_url=host.rstrip('/'))
-
+        return httpx.Client(base_url=host.rstrip("/"))
 
     raise ValueError("Either 'host' or 'app' parameter must be provided.")
 
@@ -228,17 +216,14 @@ def configure_logging():
     logs_level = config.project.logging.model_dump()
 
     for level in logs_level:
-
         log_level = getattr(logging, level.upper(), logging.WARNING)
 
         for logger_name in logs_level[level]:
-
             logging.getLogger(logger_name).setLevel(log_level)
 
 
+def print_error_line(test_path: str | Path, e: Exception):
 
-def print_error_line(test_path: str | Path, e:Exception):
-    
     tb = traceback.extract_tb(e.__traceback__)
 
     frame = None
