@@ -5,10 +5,10 @@ from swagtrace.schemas.config_schema import Config
 _CONFIG: Config | None = None
 
 
-def load_config(path: str):
+def load_config(config: str):
     global _CONFIG
 
-    with open(path, "rb") as f:
+    with open(config, "rb") as f:
         _CONFIG = Config(**load(f))
 
 

@@ -18,7 +18,7 @@ DATA_OUTPUT = TypeVar("DATA_OUTPUT", str, dict[str, Any], list)
 import httpx2 as httpx
 from starlette.testclient import TestClient
 
-from swagtrace.config import get_config
+from swagtrace.shared.backend import get_config
 
 
 def load_module(module_path: str, project_root: str | None = None):

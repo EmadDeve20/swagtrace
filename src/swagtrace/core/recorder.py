@@ -2,6 +2,7 @@ import json
 import pprint
 import urllib.error
 import urllib.request
+from argparse import _SubParsersAction
 from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from importlib.resources import files
@@ -13,8 +14,9 @@ import yaml
 from yaml_syntax.syntax import YamlSyntax
 
 import swagtrace.monkey_patching
-from swagtrace.config import get_config
+from swagtrace.consts import DEFAULT_TEST_MODULE_FOLDER, DEFAULT_YAML_FILE
 from swagtrace.schemas.yaml_schema import SwagTaceTestFormat, TestCase
+from swagtrace.shared.backend import get_config
 from swagtrace.utils import get_yes_no_user_options, match_path_template
 
 
@@ -216,12 +218,18 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
                 print(res_body_str)
         print("═" * 60 + "\n")
 
-        is_user_wants_save_this_case = get_yes_no_user_options("Do you want to save this case")
+        is_user_wants_save_this_case = get_yes_no_user_options(
+            "Do you want to save this case"
+        )
 
         if is_user_wants_save_this_case:
-            is_user_wants_save_this_response = get_yes_no_user_options("Also Save Response Content")
+            is_user_wants_save_this_response = get_yes_no_user_options(
+                "Also Save Response Content"
+            )
 
-            res_body_str = None if not is_user_wants_save_this_response else res_body_str
+            res_body_str = (
+                None if not is_user_wants_save_this_response else res_body_str
+            )
 
             case_name = input("Enter case name: ")
             case_name = case_name.replace(" ", "_").lower()
@@ -311,3 +319,28 @@ def run_server(host: str, port: int, file: str, dir: str):
             )
 
         httpd.server_close()
+
+
+def set_recorder_command(subparsers: _SubParsersAction, command: str = "record") -> str:
+    recorder_parser = subparsers.add_parser(command, help="record requests API")
+    recorder_parser.add_argument(
+        "--host", type=str, help="API Base url", default="http://127.0.0.1:8000"
+    )
+    recorder_parser.add_argument(
+        "--port", type=int, help="Proxy Listen Port", default=8080
+    )
+    recorder_parser.add_argument(
+        "--file",
+        type=str,
+        help="path of swagtrace.yaml file",
+        default=DEFAULT_YAML_FILE,
+    )
+    recorder_parser.add_argument(
+        "--dir",
+        type=str,
+        help="path of test module",
+        default=DEFAULT_TEST_MODULE_FOLDER,
+    )
+    recorder_parser.set_defaults(func=run_server)
+
+    return command
