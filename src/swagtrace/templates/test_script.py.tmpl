@@ -1,13 +1,45 @@
 from requests import Response
 
+# -----------------------------------------------------------------------------
+# 1. CONFIGURATION & DYNAMIC VARIABLES
+# -----------------------------------------------------------------------------
+# Key-value pairs injected into the HTTP Request template (e.g., YAML/JSON).
+# You can define static defaults here or dynamically populate/override them 
+# inside the prepare() function.
+# NOTE: Variable names (keys) are CASE-SENSITIVE (e.g., 'TOKEN' != 'token').
 VARIABLES = $variables_dict
 
+
+# -----------------------------------------------------------------------------
+# 2. PREPARATION PHASE (PHASE 1 - Runs FIRST)
+# -----------------------------------------------------------------------------
+# Executed BEFORE generating the request template and making the HTTP call.
+# Use this to:
+# - Set up prerequisites (e.g., seed database, generate mock payload).
+# - Fetch authorization tokens or dynamic parameters.
+# - Inject values directly into the 'VARIABLES' dictionary.
 ${async_prefix}def prepare():
     pass
 
+# -----------------------------------------------------------------------------
+# 3. ASSERTION & INSPECTION PHASE (PHASE 2 - Runs AFTER HTTP Request)
+# -----------------------------------------------------------------------------
+# Executed IMMEDIATELY after the API call finishes.
+# Receives the live 'requests.Response' object from the target server.
+# Use this to:
+# - Write custom asserts (e.g., assert response.status_code == 200).
+# - Parse response JSON/Headers and validate domain logic.
+# - Store state/IDs created by this request for downstream use.
 ${async_prefix}def main(response: Response):
     pass
 
+# -----------------------------------------------------------------------------
+# 4. CLEANUP & TEARDOWN PHASE (PHASE 3 - Runs LAST)
+# -----------------------------------------------------------------------------
+# Executed as the final step after main() completes.
+# Use this optional step to clean up any side-effects or temporary data:
+# - Delete objects created in database/API during the test execution.
+# - Invalidate session tokens or flush temporary test state.
 ${async_prefix}def finalize():
     pass
 
