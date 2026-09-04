@@ -1,28 +1,45 @@
 from __future__ import annotations
 
+import json
+import shutil
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
-
-from importlib.resources import files
-
-import shutil
-
 
 import httpx
 import yaml
 
-from swagtrace.consts import DEFAULT_TEST_MODULE_FOLDER, DEFAULT_YAML_FILE, PREPARE_AND_FINAL_FORMAT_FILE
-from swagtrace.schemas.yaml_schema import ElementInfo, prepareAndFinal, SwagTaceTestFormat
+from swagtrace.consts import (
+    DEFAULT_TEST_MODULE_FOLDER,
+    DEFAULT_YAML_FILE,
+    PREPARE_AND_FINAL_FORMAT_FILE,
+)
+from swagtrace.schemas.yaml_schema import (
+    ElementInfo,
+    SwagTaceTestFormat,
+    prepareAndFinal,
+)
 
 
-def fetch_openapi(url: str, timeout: float = 10.0) -> dict[str, Any]:
-    response = httpx.get(url, timeout=timeout)
-    response.raise_for_status()
+def fetch_openapi(url: str|None, file:str|None, timeout: float = 10.0) -> dict[str, Any]:
+    if file:
+        file_json_format_content = {}
 
-    content_type = response.headers.get("content-type", "")
-    if "yaml" in content_type or url.endswith((".yaml", ".yml")):
-        return yaml.safe_load(response.text)
-    return response.json()
+        with open(file, "r") as file_object:
+            if file.endswith((".yaml", ".yml")):
+                file_json_format_content = yaml.safe_load(file_object.read())
+            else:
+                file_json_format_content = json.load(file_object)
+        return file_json_format_content
+
+    else:
+        response = httpx.get(url, timeout=timeout)
+        response.raise_for_status()
+
+        content_type = response.headers.get("content-type", "")
+        if "yaml" in content_type or url.endswith((".yaml", ".yml")):
+            return yaml.safe_load(response.text)
+        return response.json()
 
 def extract_endpoints(spec: dict[str, Any]) -> SwagTaceTestFormat:
 
@@ -105,9 +122,9 @@ def init_config_file(output_path:str):
     shutil.copy(template_path, target_path)
 
 
-def discover_and_save(url: str, output: str):
+def discover_and_save(url: str, output: str, file:str|None=None):
     print(f"Fetching OpenAPI from: {url}")
-    spec = fetch_openapi(url)
+    spec = fetch_openapi(url=url, file=file)
 
     print("Extracting endpoints...")
     endpoints = extract_endpoints(spec)
