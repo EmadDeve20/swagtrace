@@ -248,3 +248,48 @@ def print_error_line(test_path: str | Path, e: Exception):
                 print(f"          {lineno:4} | {code}")
     else:
         traceback.print_exc()
+
+
+def get_yes_no_user_options(
+    msg: str, yes_option: str = "y", no_option: str = "n", default_option: str = "y"
+) -> bool:
+    """
+    Ask yes/no question from user 
+
+    Args:
+        msg (str): message to get yse or no answer. write answer without Question mark it will add at the end of question automatically
+        yes_option (str, optional): Character for yes answer. Defaults to "y".
+        no_option (str, optional): Character for no answer. Defaults to "n".
+        default_option (str, optional): Default option it useful when user only press Enter key. Defaults to "y".
+
+    Raises:
+        ValueError: raise Value error if default_option is not same of one of yes/no options 
+
+    Returns:
+        bool: return user's answer. it will be True of user answer was Yes otherwise, False
+    """
+
+    if default_option != yes_option and default_option != no_option:
+        raise ValueError("default_option must be one of yes or no options!")
+
+    user_input_prompt = f"{msg}? ({yes_option.upper() if default_option.lower() == yes_option.lower() else yes_option.lower()}|{no_option.upper() if default_option.lower() == no_option.lower() else no_option.lower()})"
+
+    DEFAULT_INPUT_CHAR = ""
+
+    user_op = input(user_input_prompt)
+
+    while (
+        user_op.lower() != yes_option.lower()
+        and user_op.lower() != no_option.lower()
+        and user_op != DEFAULT_INPUT_CHAR
+    ):
+        if user_op != no_option:
+            print("Wrong Answer!")
+
+        user_op = input(user_input_prompt)
+
+    if user_op == DEFAULT_INPUT_CHAR:
+        user_op = default_option
+
+    return user_op == yes_option 
+
