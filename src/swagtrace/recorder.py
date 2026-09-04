@@ -12,8 +12,8 @@ from urllib.parse import parse_qsl, urlparse
 import yaml
 from yaml_syntax.syntax import YamlSyntax
 
+import swagtrace.monkey_patching
 from swagtrace.config import get_config
-from swagtrace.consts import TEST_CASE_FORMAT_FILE
 from swagtrace.schemas.yaml_schema import SwagTaceTestFormat, TestCase
 from swagtrace.utils import get_yes_no_user_options, match_path_template
 
@@ -219,7 +219,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
         is_user_wants_save_this_case = get_yes_no_user_options("Do you want to save this case")
 
         if is_user_wants_save_this_case:
-            is_user_wants_save_this_response = input("Also Save Response Content? [Y/n]")
+            is_user_wants_save_this_response = get_yes_no_user_options("Also Save Response Content")
 
             res_body_str = None if not is_user_wants_save_this_response else res_body_str
 
