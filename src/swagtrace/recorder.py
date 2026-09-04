@@ -224,7 +224,7 @@ class APIRecorderProxyHandler(BaseHTTPRequestHandler):
             res_body_str = None if not is_user_wants_save_this_response else res_body_str
 
             case_name = input("Enter case name: ")
-            case_name = case_name.replace(" ", "_")
+            case_name = case_name.replace(" ", "_").lower()
 
             case = TestCase(
                 name=case_name,
