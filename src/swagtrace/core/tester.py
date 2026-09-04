@@ -9,6 +9,11 @@ from yaml_syntax.syntax import YamlSyntax
 
 from swagtrace.consts import DEFAULT_TEST_MODULE_FOLDER, DEFAULT_YAML_FILE
 from swagtrace.schemas.yaml_schema import SwagTaceTestFormat
+from swagtrace.shared import (
+    reset_runner_context,
+    set_idle_status_runner,
+    set_running_status_runner,
+)
 from swagtrace.utils import (
     configure_logging,
     function_manager,
@@ -80,6 +85,8 @@ class TestRunner:
 
         await function_manager.execute_function(module.main, cp=result)
 
+    # TODO: Break this function to two more than a function
+    # for clean code and keep specific responsibility for each functions
     async def run_tags_cases(
         self,
     ) -> int:
@@ -113,8 +120,10 @@ class TestRunner:
                     excepted_status = case.status_code
 
                     start_test_time = time.time()
+                    token = None
 
                     try:
+                        token = set_running_status_runner()
                         module = load_module(module_path=test_path)
                         await execute_function(module.prepare)
                         variables = load_variables_module(module)
@@ -175,6 +184,8 @@ class TestRunner:
                             )
                             print(f"         └── {type(e).__name__}: {e}", flush=True)
                             print_error_line(test_path, e)
+                        finally:
+                            reset_runner_context(token=token)
 
         duration = round((time.time() - start_total_time) * 1000, 2)
 
@@ -197,14 +208,18 @@ class TestRunner:
 
             self.exit_code = await self.run_tags_cases()
 
-            await self.finale_tests()
-
-            return self.exit_code
+        except KeyboardInterrupt:
+            print("Test Canceled")
 
         # TODO: make error message better for user
         except Exception as e:
             print(f"Failed to Run Test! Details: {e}")
-            return 1
+            self.exit_code = 1
+
+        finally:
+            await self.finale_tests()
+
+        return self.exit_code
 
 
 def run_tests(
