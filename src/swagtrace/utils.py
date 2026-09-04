@@ -10,6 +10,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, TypeVar
 
+from readchar import readkey
+
 DATA_OUTPUT = TypeVar("DATA_OUTPUT", str, dict[str, Any], list)
 
 
@@ -249,7 +251,22 @@ def print_error_line(test_path: str | Path, e: Exception):
     else:
         traceback.print_exc()
 
+def getch(prompt:str) -> str:
+    """
+    get character from input/user
 
+    Args:
+        prompt (str): prompt message to get user Input
+
+    Returns:
+        str: return inout character
+    """
+
+    print(prompt, flush=True)
+
+    return readkey()
+
+    
 def get_yes_no_user_options(
     msg: str, yes_option: str = "y", no_option: str = "n", default_option: str = "y"
 ) -> bool:
@@ -272,23 +289,23 @@ def get_yes_no_user_options(
     if default_option != yes_option and default_option != no_option:
         raise ValueError("default_option must be one of yes or no options!")
 
-    user_input_prompt = f"{msg}? ({yes_option.upper() if default_option.lower() == yes_option.lower() else yes_option.lower()}|{no_option.upper() if default_option.lower() == no_option.lower() else no_option.lower()})"
+    user_input_prompt = f"{msg}? [{yes_option.upper() if default_option.lower() == yes_option.lower() else yes_option.lower()}/{no_option.upper() if default_option.lower() == no_option.lower() else no_option.lower()}]"
 
-    DEFAULT_INPUT_CHAR = ""
+    DEFAULT_INPUT_CHAR = ["\n", "\r\n", "\r"]
 
-    user_op = input(user_input_prompt)
+    user_op = getch(user_input_prompt)
 
     while (
         user_op.lower() != yes_option.lower()
         and user_op.lower() != no_option.lower()
-        and user_op != DEFAULT_INPUT_CHAR
+        and user_op not in DEFAULT_INPUT_CHAR
     ):
         if user_op != no_option:
             print("Wrong Answer!")
 
-        user_op = input(user_input_prompt)
+        user_op = getch(user_input_prompt)
 
-    if user_op == DEFAULT_INPUT_CHAR:
+    if user_op in DEFAULT_INPUT_CHAR:
         user_op = default_option
 
     return user_op == yes_option 
