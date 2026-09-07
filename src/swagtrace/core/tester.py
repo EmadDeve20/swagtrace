@@ -116,6 +116,7 @@ class TestRunner:
                 for case in el.cases:
                     headers = case.request_header
                     body = case.request_body
+                    query_parens = case.query_params
                     test_path = f"{self.project_dire}/{tag}/{case.name}.py"
                     excepted_status = case.status_code
 
@@ -130,10 +131,11 @@ class TestRunner:
 
                         url = set_variables_in_data(path, variables, GLOBAL_VARIABLES)
                         body = set_variables_in_data(body, variables, GLOBAL_VARIABLES)
-
+                        query_parens = set_variables_in_data(query_parens, variables, GLOBAL_VARIABLES)
+                        headers = set_variables_in_data(headers, variables, GLOBAL_VARIABLES)
                         # TODO: Handle if body is not JSON
                         response = await request(
-                            method=method, url=url, headers=headers, json=body
+                            method=method, url=url, headers=headers, json=body, params=query_parens
                         )
 
                         status_code = response.status_code
